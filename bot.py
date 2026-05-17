@@ -26,7 +26,6 @@ def get_mtonga_price():
         response.raise_for_status()
 
         data = response.json()
-
         pair = data.get("pair")
 
         if not pair:
@@ -50,15 +49,22 @@ def format_message(data):
         f"MC: ${data['fdv'] / 1_000_000:.1f}kk"
     )
 
+    dollar_offset = len(f"${data['price_usd']:.4f} ")
+
+    ton_offset = len(
+        f"${data['price_usd']:.4f} $\n"
+        f"{data['price_ton']:.6f} "
+    )
+
     entities = [
         {
-            "offset": 9,
+            "offset": dollar_offset,
             "length": 1,
             "type": "custom_emoji",
             "custom_emoji_id": DOLLAR_EMOJI_ID
         },
         {
-            "offset": 20,
+            "offset": ton_offset,
             "length": 1,
             "type": "custom_emoji",
             "custom_emoji_id": TON_EMOJI_ID
@@ -79,7 +85,12 @@ def send_telegram_message(text, entities=None):
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=10
+        )
+
         response.raise_for_status()
 
         logging.info("Сообщение отправлено")
