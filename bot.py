@@ -14,19 +14,18 @@ DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/ton/eqdo_vbl
 DOLLAR_EMOJI_ID = "5195308461193182892"
 TON_EMOJI_ID = "5188672371648634636"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+def tg_len(text):
+    return len(text.encode("utf-16-le")) // 2
 
 
 def get_mtonga_price():
     try:
-        response = requests.get(DEXSCREENER_API_URL, timeout=15)
-        response.raise_for_status()
-
-        data = response.json()
-        pair = data.get("pair")
+        r = requests.get(DEXSCREENER_API_URL, timeout=15)
+        r.raise_for_status()
+        pair = r.json().get("pair")
 
         if not pair:
             return None
@@ -43,69 +42,87 @@ def get_mtonga_price():
 
 
 def format_message(data):
-    text = (
-        f"${data['price_usd']:.4f} $\n"
-        f"{data['price_ton']:.6f} T\n\n"
-        f"MC: ${data['fdv'] / 1_000_000:.1f}kk"
-    )
+    price_usd = f"{data['price_usd']:.4f}"
+    price_ton = f"{data['price_ton']:.6f}"
+    mc = f"{data['fdv'] / 1_000_000:.1f}kk"
 
-    dollar_offset = len(f"${data['price_usd']:.4f} ")
+    text = ""
+    entities = []
 
-    ton_offset = len(
-        f"${data['price_usd']:.4f} $\n"
-        f"{data['price_ton']:.6f} "
-    )
+    text += f"${price_usd} "
 
-    entities = [
-        {
-            "offset": dollar_offset,
-            "length": 1,
-            "type": "custom_emoji",
-            "custom_emoji_id": DOLLAR_EMOJI_ID
-        },
-        {
-            "offset": ton_offset,
-            "length": 1,
-            "type": "custom_emoji",
-            "custom_emoji_id": TON_EMOJI_ID
-        }
-    ]
+    dollar_offset = tg_len(text)
+    text += "$"
+
+    entities.append({
+        "offset": dollar_offset,
+        "length": tg_len("$"),
+        "type": "custom_emoji",
+        "custom_emoji_id": DOLLAR_EMOJI_ID
+    })
+
+    text += "\n"
+    text += f"{price_ton} "
+
+    ton_offset = tg_len(text)
+    text += "TON"
+
+    entities.append({
+        "offset": ton_offset,
+        "length": tg_len("TON"),
+        "type": "custom_emoji",
+        "custom_emoji_id": TON_EMOJI_ID
+    })
+
+    text += f"\n\nMC: ${mc}"
 
     return text, entities
 
 
-def send_telegram_message(text, entities=None):
+def check_custom_emoji_ids():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getCustomEmojiStickers"
+
+    payload = {
+        "custom_emoji_ids": [
+            DOLLAR_EMOJI_ID,
+            TON_EMOJI_ID
+        ]
+    }
+
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        logging.info(f"Проверка emoji IDs: {r.text}")
+    except Exception as e:
+        logging.error(f"Ошибка проверки emoji IDs: {e}")
+
+
+def send_telegram_message(text, entities):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     payload = {
         "chat_id": CHANNEL_ID,
         "text": text,
-        "entities": entities or [],
+        "entities": entities,
         "disable_web_page_preview": True
     }
 
     try:
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=10
-        )
-
-        response.raise_for_status()
-
+        r = requests.post(url, json=payload, timeout=10)
+        r.raise_for_status()
         logging.info("Сообщение отправлено")
 
     except Exception as e:
         logging.error(f"Ошибка отправки: {e}")
-
         try:
-            logging.error(response.text)
-        except:
+            logging.error(r.text)
+        except Exception:
             pass
 
 
 if __name__ == "__main__":
     logging.info("Бот запущен")
+
+    check_custom_emoji_ids()
 
     while True:
         data = get_mtonga_price()
