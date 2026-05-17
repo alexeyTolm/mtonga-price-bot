@@ -11,21 +11,27 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/ton/eqdo_vblig0b_yr7kwcb0wyxzlzcnmd7rw3jtqmv01nx5g54"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+DOLLAR_EMOJI_ID = "5195308461193182892"
+TON_EMOJI_ID = "5188672371648634636"
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+def utf16_len(text):
+    return len(text.encode("utf-16-le")) // 2
+
+
+def get_entity_offset(text, marker):
+    return utf16_len(text[:text.index(marker)])
 
 
 def get_mtonga_price():
     try:
         response = requests.get(DEXSCREENER_API_URL, timeout=15)
         response.raise_for_status()
-
         data = response.json()
 
         pair = data.get("pair")
-
         if not pair:
             return None
 
@@ -41,25 +47,28 @@ def get_mtonga_price():
 
 
 def format_message(data):
+    dollar_marker = "💰"
+    ton_marker = "👛"
+
     text = (
-        f"${data['price_usd']:.4f} 💰\n"
-        f"{data['price_ton']:.6f} 👛\n\n"
+        f"${data['price_usd']:.4f} {dollar_marker}\n"
+        f"{data['price_ton']:.6f} {ton_marker}\n\n"
         f"MC: ${data['fdv'] / 1_000_000:.1f}kk"
     )
 
     entities = [
         {
-            "offset": text.index("💰"),
+            "offset": get_entity_offset(text, dollar_marker),
             "length": 2,
             "type": "custom_emoji",
-            "custom_emoji_id": "5195308461193182892"
+            "custom_emoji_id": DOLLAR_EMOJI_ID,
         },
         {
-            "offset": text.index("👛"),
+            "offset": get_entity_offset(text, ton_marker),
             "length": 2,
             "type": "custom_emoji",
-            "custom_emoji_id": "5188672371648634636"
-        }
+            "custom_emoji_id": TON_EMOJI_ID,
+        },
     ]
 
     return text, entities
@@ -72,7 +81,7 @@ def send_telegram_message(text, entities=None):
         "chat_id": CHANNEL_ID,
         "text": text,
         "entities": entities or [],
-        "disable_web_page_preview": True
+        "disable_web_page_preview": True,
     }
 
     try:
@@ -82,6 +91,10 @@ def send_telegram_message(text, entities=None):
 
     except Exception as e:
         logging.error(f"Ошибка отправки: {e}")
+        try:
+            logging.error(response.text)
+        except:
+            pass
 
 
 if __name__ == "__main__":
