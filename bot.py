@@ -1,8 +1,8 @@
 import os
 import time
 import logging
-import requests
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -10,10 +10,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/ton/eqdo_vblig0b_yr7kwcb0wyxzlzcnmd7rw3jtqmv01nx5g54"
-
-# Ваши ID кастомных эмодзи
-DOLLAR_EMOJI_ID = "5195308461193182892"
-TON_EMOJI_ID = "5188672371648634636"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -40,8 +36,8 @@ def get_mtonga_price():
 
 
 def format_number(num):
-    """Форматирует число с разделителями тысяч"""
-    return f"{num:,.0f}".replace(",", " ")
+    """Форматирует число с запятыми как разделителями тысяч"""
+    return f"{num:,.0f}"
 
 
 def format_message(data):
@@ -49,26 +45,17 @@ def format_message(data):
     price_ton = data['price_ton']
     mc = data['fdv']
     
-    # Форматируем цены
-    if price_usd < 0.01:
-        price_usd_str = f"{price_usd:.6f}"
-    else:
-        price_usd_str = f"{price_usd:.4f}"
+    # Форматируем цену USD (4 знака после запятой)
+    price_usd_str = f"{price_usd:.4f}"
     
-    if price_ton < 0.0001:
-        price_ton_str = f"{price_ton:.8f}"
-    else:
-        price_ton_str = f"{price_ton:.6f}"
+    # Форматируем цену TON (6 знаков после запятой)
+    price_ton_str = f"{price_ton:.6f}"
     
+    # Форматируем MC с запятыми
     mc_str = format_number(mc)
     
-    # Создаем кастомные эмодзи через HTML-разметку
-    # Внутри тега указываем обычный эмодзи как заглушку
-    dollar_emoji = f'<a href="tg://emoji?id={DOLLAR_EMOJI_ID}">💵</a>'
-    ton_emoji = f'<a href="tg://emoji?id={TON_EMOJI_ID}">💎</a>'
-    
-    # Собираем сообщение в нужном формате
-    text = f"{dollar_emoji} {price_usd_str} | {price_ton_str} {ton_emoji}\nMC: ${mc_str}"
+    # Точный формат без эмодзи
+    text = f"${price_usd_str} | {price_ton_str} TON\nMC: ${mc_str}"
     
     return text
 
@@ -79,7 +66,6 @@ def send_telegram_message(text):
     payload = {
         "chat_id": CHANNEL_ID,
         "text": text,
-        "parse_mode": "HTML",  # Обязательно для кастомных эмодзи
         "disable_web_page_preview": True
     }
     
@@ -87,7 +73,6 @@ def send_telegram_message(text):
         r = requests.post(url, json=payload, timeout=10)
         r.raise_for_status()
         logging.info("✅ Сообщение отправлено")
-        logging.info(f"Текст: {text}")
         
     except Exception as e:
         logging.error(f"❌ Ошибка отправки: {e}")
@@ -95,47 +80,17 @@ def send_telegram_message(text):
             logging.error(f"Ответ: {r.text}")
 
 
-def check_bot_permissions():
-    """Проверяет, может ли бот отправлять кастомные эмодзи"""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
-    
-    try:
-        r = requests.get(url, timeout=10)
-        bot_info = r.json()
-        
-        if bot_info.get("ok"):
-            bot = bot_info.get("result", {})
-            username = bot.get("username")
-            is_premium = bot.get("is_premium", False)
-            
-            logging.info(f"🤖 Бот: @{username}")
-            logging.info(f"💎 Премиум статус: {is_premium}")
-            
-            if not is_premium:
-                logging.warning("⚠️ Бот не имеет премиум статуса. Кастомные эмодзи могут не работать!")
-                logging.warning("Для отправки кастомных эмодзи боту нужен Telegram Business или купленный юзернейм")
-        else:
-            logging.error("Не удалось получить информацию о боте")
-            
-    except Exception as e:
-        logging.error(f"Ошибка проверки прав бота: {e}")
-
-
 if __name__ == "__main__":
     logging.info("🚀 Бот запущен")
     
-    # Проверяем права бота
-    check_bot_permissions()
+    # Проверяем переменные окружения
+    if not BOT_TOKEN:
+        logging.error("❌ BOT_TOKEN не найден в .env файле!")
+        exit(1)
     
-    # Отправляем тестовое сообщение при старте
-    test_data = {
-        "price_usd": 0.0152,
-        "price_ton": 0.007948,
-        "fdv": 1519694
-    }
-    test_text = format_message(test_data)
-    logging.info(f"📝 Тестовое сообщение: {test_text}")
-    send_telegram_message(test_text)
+    if not CHANNEL_ID:
+        logging.error("❌ CHANNEL_ID не найден в .env файле!")
+        exit(1)
     
     # Основной цикл
     while True:
@@ -145,14 +100,15 @@ if __name__ == "__main__":
             if data:
                 text = format_message(data)
                 send_telegram_message(text)
+                logging.info(f"💰 Отправлена цена: ${data['price_usd']:.4f} | {data['price_ton']:.6f} TON")
             else:
                 logging.warning("⚠️ Не удалось получить данные о цене")
             
             time.sleep(60)
             
         except KeyboardInterrupt:
-            logging.info("🛑 Бот остановлен пользователем")
+            logging.info("🛑 Бот остановлен")
             break
         except Exception as e:
-            logging.error(f"❌ Непредвиденная ошибка: {e}")
+            logging.error(f"❌ Ошибка: {e}")
             time.sleep(60)
