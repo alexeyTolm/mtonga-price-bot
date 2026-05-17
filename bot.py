@@ -11,16 +11,21 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/ton/eqdo_vblig0b_yr7kwcb0wyxzlzcnmd7rw3jtqmv01nx5g54"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def get_mtonga_price():
     try:
         response = requests.get(DEXSCREENER_API_URL, timeout=15)
         response.raise_for_status()
+
         data = response.json()
 
         pair = data.get("pair")
+
         if not pair:
             return None
 
@@ -35,25 +40,48 @@ def get_mtonga_price():
         return None
 
 
-def send_telegram_message(text):
+def format_message(data):
+    text = (
+        f"${data['price_usd']:.4f} 💰\n"
+        f"{data['price_ton']:.6f} 👛\n\n"
+        f"MC: ${data['fdv'] / 1_000_000:.1f}kk"
+    )
+
+    entities = [
+        {
+            "offset": text.index("💰"),
+            "length": 2,
+            "type": "custom_emoji",
+            "custom_emoji_id": "5195308461193182892"
+        },
+        {
+            "offset": text.index("👛"),
+            "length": 2,
+            "type": "custom_emoji",
+            "custom_emoji_id": "5188672371648634636"
+        }
+    ]
+
+    return text, entities
+
+
+def send_telegram_message(text, entities=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     payload = {
         "chat_id": CHANNEL_ID,
         "text": text,
-        "disable_web_page_preview": True,
+        "entities": entities or [],
+        "disable_web_page_preview": True
     }
 
     try:
-        response = requests.post(url, data=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
         logging.info("Сообщение отправлено")
+
     except Exception as e:
         logging.error(f"Ошибка отправки: {e}")
-
-
-def format_message(data):
-    return f"${data['price_usd']:.4f} | {data['price_ton']:.6f} TON\nMC: ${data['fdv']:,.0f}"
 
 
 if __name__ == "__main__":
@@ -63,6 +91,7 @@ if __name__ == "__main__":
         data = get_mtonga_price()
 
         if data:
-            send_telegram_message(format_message(data))
+            text, entities = format_message(data)
+            send_telegram_message(text, entities)
 
         time.sleep(60)
