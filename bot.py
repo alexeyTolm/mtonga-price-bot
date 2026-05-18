@@ -13,6 +13,9 @@ DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/ton/eqdo_vbl
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Хранилище последней цены
+last_price_usd = None
+
 
 def get_mtonga_price():
     try:
@@ -40,10 +43,27 @@ def format_number(num):
     return f"{num:,.0f}"
 
 
+def get_trend_symbol(current_price, last_price):
+    """Возвращает символ состояния цены"""
+    if last_price is None:
+        return "⚪"  # Белый кружок (первый запуск)
+    elif current_price > last_price:
+        return "🟢"  # Зеленый кружок (рост)
+    elif current_price < last_price:
+        return "🔴"  # Красный кружок (падение)
+    else:
+        return "⚪"  # Белый кружок (без изменений)
+
+
 def format_message(data):
+    global last_price_usd
+    
     price_usd = data['price_usd']
     price_ton = data['price_ton']
     mc = data['fdv']
+    
+    # Получаем символ состояния
+    trend = get_trend_symbol(price_usd, last_price_usd)
     
     # Форматируем цену USD (4 знака после запятой)
     price_usd_str = f"{price_usd:.4f}"
@@ -54,8 +74,11 @@ def format_message(data):
     # Форматируем MC с запятыми
     mc_str = format_number(mc)
     
-    # Точный формат без эмодзи
-    text = f"${price_usd_str} | {price_ton_str} TON\nMC: ${mc_str}"
+    # Формат с значком состояния в начале
+    text = f"{trend} ${price_usd_str} | {price_ton_str} TON\nMC: ${mc_str}"
+    
+    # Сохраняем текущую цену для следующего сравнения
+    last_price_usd = price_usd
     
     return text
 
